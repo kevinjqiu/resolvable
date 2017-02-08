@@ -13,7 +13,7 @@ import (
 
 	"github.com/miekg/dns"
 
-	"github.com/gliderlabs/resolvable/resolver"
+	"github.com/kevinjqiu/resolvable/resolver"
 
 	dockerapi "github.com/fsouza/go-dockerclient"
 )
