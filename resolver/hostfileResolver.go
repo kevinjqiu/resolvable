@@ -12,6 +12,7 @@ type hostfileResolver struct {
 	mutex    sync.RWMutex
 	hosts    map[string]*hostsEntry
 	hostfile goodhosts.Hosts
+	stopped  chan struct{}
 }
 
 // NewHostFileResolver is a factory method that returns a new instance of the hostfileResolver structure
@@ -23,6 +24,7 @@ func NewHostFileResolver() (*hostfileResolver, error) {
 	return &hostfileResolver{
 		hosts:    make(map[string]*hostsEntry),
 		hostfile: hostfile,
+		stopped:  make(chan struct{}),
 	}, nil
 }
 
@@ -33,7 +35,10 @@ func (r *hostfileResolver) AddHost(id string, addr net.IP, name string, aliases 
 	hosts := append([]string{name}, aliases...)
 	r.hosts[id] = &hostsEntry{Address: addr, Names: hosts}
 	err := r.hostfile.Add(addr.String(), hosts...)
-	return err
+	if err != nil {
+		return err
+	}
+	return r.hostfile.Flush()
 }
 
 func (r *hostfileResolver) RemoveHost(id string) error {
@@ -43,7 +48,11 @@ func (r *hostfileResolver) RemoveHost(id string) error {
 	hostEntry, ok := r.hosts[id]
 	if ok {
 		delete(r.hosts, id)
-		return r.hostfile.Remove(hostEntry.Address.String(), hostEntry.Names...)
+		err := r.hostfile.Remove(hostEntry.Address.String(), hostEntry.Names...)
+		if err != nil {
+			return err
+		}
+		return r.hostfile.Flush()
 	}
 	return nil
 }
@@ -63,7 +72,11 @@ func (r *hostfileResolver) Listen() error {
 	return nil
 }
 
-func (r *hostfileResolver) Close() error {
+func (r *hostfileResolver) Close() {
 	log.Printf("Close is not supported by HostFileResolver")
+}
+
+func (r *hostfileResolver) Wait() error {
+	<-r.stopped
 	return nil
 }

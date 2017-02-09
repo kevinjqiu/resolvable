@@ -223,14 +223,16 @@ func run() error {
 		log.Println("using address for --net=host:", hostIP)
 	}
 
-	dnsResolver, err := resolver.NewResolver()
+	// dnsResolver, err := resolver.NewResolver()
+	theResolver, err := resolver.NewHostFileResolver()
+
 	if err != nil {
 		return err
 	}
-	defer dnsResolver.Close()
+	defer theResolver.Close()
 
 	localDomain := "docker"
-	dnsResolver.AddUpstream(localDomain, nil, 0, localDomain)
+	theResolver.AddUpstream(localDomain, nil, 0, localDomain)
 
 	resolvConfig, err := dns.ClientConfigFromFile("/etc/resolv.conf")
 	if err != nil {
@@ -242,16 +244,16 @@ func run() error {
 	}
 	for _, server := range resolvConfig.Servers {
 		if server != address {
-			dnsResolver.AddUpstream("resolv.conf:"+server, net.ParseIP(server), resolvConfigPort)
+			theResolver.AddUpstream("resolv.conf:"+server, net.ParseIP(server), resolvConfigPort)
 		}
 	}
 
 	go func() {
-		dnsResolver.Wait()
+		theResolver.Wait()
 		exitReason <- errors.New("dns resolver exited")
 	}()
 	go func() {
-		exitReason <- registerContainers(docker, nil, dnsResolver, localDomain, hostIP)
+		exitReason <- registerContainers(docker, nil, theResolver, localDomain, hostIP)
 	}()
 
 	return <-exitReason
