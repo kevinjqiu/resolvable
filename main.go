@@ -16,7 +16,6 @@ import (
 	"github.com/kevinjqiu/resolvable/resolver"
 
 	dockerapi "github.com/fsouza/go-dockerclient"
-	"github.com/lextoumbourou/goodhosts"
 )
 
 var Version string
@@ -79,11 +78,6 @@ func registerContainers(docker *dockerapi.Client, events chan *dockerapi.APIEven
 		containerDomain = "." + containerDomain
 	}
 
-	hosts, err := goodhosts.NewHosts()
-	if err != nil {
-		return err
-	}
-
 	getAddress := func(container *dockerapi.Container) (net.IP, error) {
 		for {
 			if container.NetworkSettings.IPAddress != "" {
@@ -124,12 +118,6 @@ func registerContainers(docker *dockerapi.Client, events chan *dockerapi.APIEven
 
 		err = dns.AddHost(containerId, addr, container.Config.Hostname, container.Name[1:]+containerDomain)
 		if err != nil {
-			return err
-		}
-
-		hosts.Add(addr.String(), container.Config.Hostname, container.Name[1:]+containerDomain)
-
-		if err := hosts.Flush(); err != nil {
 			return err
 		}
 
