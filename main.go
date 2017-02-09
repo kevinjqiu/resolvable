@@ -92,25 +92,22 @@ func registerContainers(docker *dockerapi.Client, events chan *dockerapi.APIEven
 				}
 			}
 
-			//if strings.HasPrefix(container.HostConfig.NetworkMode, "container:") {
-			//    otherId := container.HostConfig.NetworkMode[len("container:"):]
-			//    var err error
-			//    container, err = docker.InspectContainer(otherId)
-			//    if err != nil {
-			//        return nil, err
-			//    }
-			//    continue
-			//}
+			if strings.HasPrefix(container.HostConfig.NetworkMode, "container:") {
+				otherId := container.HostConfig.NetworkMode[len("container:"):]
+				var err error
+				container, err = docker.InspectContainer(otherId)
+				if err != nil {
+					return nil, err
+				}
+				continue
+			} else {
+				networkId := container.HostConfig.NetworkMode
 
-			otherId := container.HostConfig.NetworkMode[len("container:"):]
-			var err error
-			container, err = docker.InspectContainer(otherId)
-			if err != nil {
-				return nil, err
+				network := container.NetworkSettings.Networks[networkId]
+				return net.ParseIP(network.IPAddress), nil
 			}
 
-			continue
-			//return nil, fmt.Errorf("unknown network mode", container.HostConfig.NetworkMode)
+			return nil, fmt.Errorf("unknown network mode", container.HostConfig.NetworkMode)
 		}
 	}
 
