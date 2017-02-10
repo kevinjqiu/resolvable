@@ -121,7 +121,17 @@ func registerContainers(docker *dockerapi.Client, events chan *dockerapi.APIEven
 			return err
 		}
 
-		err = dns.AddHost(containerId, addr, container.Config.Hostname, container.Name[1:]+containerDomain)
+		hosts := []string{container.Config.Hostname, container.Name[1:] + containerDomain}
+
+		network, ok := container.NetworkSettings.Networks[container.HostConfig.NetworkMode]
+		if ok {
+			aliases := network.Aliases
+			for _, alias := range aliases {
+				hosts = append(hosts, alias)
+				hosts = append(hosts, alias+containerDomain)
+			}
+		}
+		err = dns.AddHost(containerId, addr, hosts[0], hosts[1:]...)
 		if err != nil {
 			return err
 		}
