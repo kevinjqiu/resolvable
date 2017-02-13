@@ -201,7 +201,7 @@ func registerContainers(docker *dockerapi.Client, events chan *dockerapi.APIEven
 	return errors.New("docker event loop closed")
 }
 
-func run() error {
+func run(theResolver resolver.Resolver) error {
 	// set up the signal handler first to ensure cleanup is handled if a signal is
 	// caught while initializing
 	exitReason := make(chan error)
@@ -238,14 +238,6 @@ func run() error {
 		log.Println("using address for --net=host:", hostIP)
 	}
 
-	// dnsResolver, err := resolver.NewResolver()
-	theResolver, err := resolver.NewHostFileResolver()
-
-	if err != nil {
-		return err
-	}
-	defer theResolver.Close()
-
 	localDomain := "docker"
 	theResolver.AddUpstream(localDomain, nil, 0, localDomain)
 
@@ -281,7 +273,16 @@ func main() {
 	}
 	log.Printf("Starting resolvable %s ...", Version)
 
-	err := run()
+	// dnsResolver, err := resolver.NewResolver()
+	theResolver, err := resolver.NewHostFileResolver()
+
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer theResolver.Close()
+
+	err = run(theResolver)
+
 	if err != nil {
 		log.Fatal("resolvable: ", err)
 	}
