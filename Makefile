@@ -17,6 +17,10 @@ build:
 	docker build -t $(NAME):$(VERSION) .
 	docker save $(NAME):$(VERSION) | gzip -9 > build/$(NAME)_$(VERSION).tgz
 
+build-scratch:
+	govendor build -o resolvable
+	docker build -t kevinjqiu/resolvable -f Dockerfile.scratch .
+
 test:
 	GOMAXPROCS=4 go test -v ./... -race
 

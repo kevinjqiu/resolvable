@@ -13,7 +13,7 @@ import (
 
 	"github.com/miekg/dns"
 
-	"github.com/gliderlabs/resolvable/resolver"
+	"github.com/kevinjqiu/resolvable/resolver"
 
 	dockerapi "github.com/fsouza/go-dockerclient"
 )
@@ -100,6 +100,11 @@ func registerContainers(docker *dockerapi.Client, events chan *dockerapi.APIEven
 					return nil, err
 				}
 				continue
+			} else {
+				networkId := container.HostConfig.NetworkMode
+
+				network := container.NetworkSettings.Networks[networkId]
+				return net.ParseIP(network.IPAddress), nil
 			}
 
 			return nil, fmt.Errorf("unknown network mode", container.HostConfig.NetworkMode)
@@ -116,7 +121,17 @@ func registerContainers(docker *dockerapi.Client, events chan *dockerapi.APIEven
 			return err
 		}
 
-		err = dns.AddHost(containerId, addr, container.Config.Hostname, container.Name[1:]+containerDomain)
+		hosts := []string{container.Config.Hostname, container.Name[1:] + containerDomain}
+
+		network, ok := container.NetworkSettings.Networks[container.HostConfig.NetworkMode]
+		if ok {
+			aliases := network.Aliases
+			for _, alias := range aliases {
+				hosts = append(hosts, alias)
+				hosts = append(hosts, alias+containerDomain)
+			}
+		}
+		err = dns.AddHost(containerId, addr, hosts[0], hosts[1:]...)
 		if err != nil {
 			return err
 		}
@@ -186,7 +201,7 @@ func registerContainers(docker *dockerapi.Client, events chan *dockerapi.APIEven
 	return errors.New("docker event loop closed")
 }
 
-func run() error {
+func run(theResolver resolver.Resolver) error {
 	// set up the signal handler first to ensure cleanup is handled if a signal is
 	// caught while initializing
 	exitReason := make(chan error)
@@ -223,14 +238,8 @@ func run() error {
 		log.Println("using address for --net=host:", hostIP)
 	}
 
-	dnsResolver, err := resolver.NewResolver()
-	if err != nil {
-		return err
-	}
-	defer dnsResolver.Close()
-
 	localDomain := "docker"
-	dnsResolver.AddUpstream(localDomain, nil, 0, localDomain)
+	theResolver.AddUpstream(localDomain, nil, 0, localDomain)
 
 	resolvConfig, err := dns.ClientConfigFromFile("/etc/resolv.conf")
 	if err != nil {
@@ -242,19 +251,33 @@ func run() error {
 	}
 	for _, server := range resolvConfig.Servers {
 		if server != address {
-			dnsResolver.AddUpstream("resolv.conf:"+server, net.ParseIP(server), resolvConfigPort)
+			theResolver.AddUpstream("resolv.conf:"+server, net.ParseIP(server), resolvConfigPort)
 		}
 	}
 
 	go func() {
-		dnsResolver.Wait()
+		theResolver.Wait()
 		exitReason <- errors.New("dns resolver exited")
 	}()
 	go func() {
-		exitReason <- registerContainers(docker, nil, dnsResolver, localDomain, hostIP)
+		exitReason <- registerContainers(docker, nil, theResolver, localDomain, hostIP)
 	}()
 
 	return <-exitReason
+}
+
+func getResolver() (resolver.Resolver, error) {
+	switch resolverType := os.Getenv("RESOLVABLE_RESOLVER_TYPE"); resolverType {
+	case "dns":
+		log.Println("Using DNS resolver")
+		return resolver.NewResolver()
+	case "hostsfile":
+		log.Println("Using hostsfile resolver")
+		return resolver.NewHostFileResolver()
+	default:
+		log.Println("Using DNS resolver")
+		return resolver.NewResolver()
+	}
 }
 
 func main() {
@@ -264,7 +287,15 @@ func main() {
 	}
 	log.Printf("Starting resolvable %s ...", Version)
 
-	err := run()
+	theResolver, err := getResolver()
+
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer theResolver.Close()
+
+	err = run(theResolver)
+
 	if err != nil {
 		log.Fatal("resolvable: ", err)
 	}
