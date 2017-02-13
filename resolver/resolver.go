@@ -12,6 +12,8 @@ type Resolver interface {
 
 	Listen() error
 	Close()
+
+	Wait() error
 }
 
 type hostsEntry struct {

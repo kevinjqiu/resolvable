@@ -266,6 +266,20 @@ func run(theResolver resolver.Resolver) error {
 	return <-exitReason
 }
 
+func getResolver() (resolver.Resolver, error) {
+	switch resolverType := os.Getenv("RESOLVABLE_RESOLVER_TYPE"); resolverType {
+	case "dns":
+		log.Println("Using DNS resolver")
+		return resolver.NewResolver()
+	case "hostsfile":
+		log.Println("Using hostsfile resolver")
+		return resolver.NewHostFileResolver()
+	default:
+		log.Println("Using DNS resolver")
+		return resolver.NewResolver()
+	}
+}
+
 func main() {
 	if len(os.Args) == 2 && os.Args[1] == "--version" {
 		fmt.Println(Version)
@@ -273,8 +287,7 @@ func main() {
 	}
 	log.Printf("Starting resolvable %s ...", Version)
 
-	// dnsResolver, err := resolver.NewResolver()
-	theResolver, err := resolver.NewHostFileResolver()
+	theResolver, err := getResolver()
 
 	if err != nil {
 		log.Fatal(err)
